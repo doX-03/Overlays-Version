@@ -1,18 +1,18 @@
 {
-  "damageAndTyres": "3.4",
+  "damageAndTyres": "3.5",
   "damageStats": "1.1",
   "flags": "1.4",
-  "deltaBar": "1.4",
+  "deltaBar": "2.3",
   "fuelCompanion": "1.3",
   "modernRevBar": "1.3",
-  "standings": "1.6.1",
+  "standings": "1.7",
   "rejoin": "1.1",
-  "relative": "1.5.1",
+  "relative": "1.6",
   "timingAndSectors": "2.7",
   "trackMap": "1.2",
   "PitEstimated": "1.2",
   "sessionInfos": "1.2",
   "weatherForecast": "1.1",
-  "inputs": "2.1",
+  "inputs": "2.2",
   "wind": "1.0"
 }
