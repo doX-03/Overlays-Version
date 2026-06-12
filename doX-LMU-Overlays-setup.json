@@ -1,4 +1,9 @@
 {
   "version": "3.5.2",
-  "downloadUrl": "https://www.overtake.gg/downloads/dox-lmu-overlays-collection.79667/updates"
+  "downloadUrl": "https://www.overtake.gg/downloads/dox-lmu-overlays-collection.79667/updates",
+  "updateTitle": "TÍTULO SEM A VERSÃO",
+  "fullTitle": "3.5.2 - TÍTULO COMPLETO DO UPDATE",
+  "overtakeUrl": "LINK DO UPDATE ESPECÍFICO",
+  "overtakeUpdatesUrl": "https://www.overtake.gg/downloads/dox-lmu-overlays-collection.79667/updates",
+  "publishDiscord": true
 }
