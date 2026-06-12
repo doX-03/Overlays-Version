@@ -1,0 +1,119 @@
+name: Post update to Discord
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - doX-LMU-Overlays-setup.json
+
+  workflow_dispatch:
+
+jobs:
+  post-update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Post Discord update
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_UPDATES_WEBHOOK }}
+          UPDATE_FILE: doX-LMU-Overlays-setup.json
+        run: |
+          node <<'NODE'
+          const fs = require("fs");
+          const { execSync } = require("child_process");
+
+          const file = process.env.UPDATE_FILE;
+          const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+
+          if (!webhookUrl) {
+            throw new Error("Missing DISCORD_UPDATES_WEBHOOK secret.");
+          }
+
+          const current = JSON.parse(fs.readFileSync(file, "utf8"));
+
+          if (current.publishDiscord === false) {
+            console.log("publishDiscord is false. Skipping.");
+            process.exit(0);
+          }
+
+          let previousVersion = null;
+
+          try {
+            const previousRaw = execSync(`git show HEAD^:${file}`, {
+              encoding: "utf8",
+              stdio: ["ignore", "pipe", "ignore"]
+            });
+
+            previousVersion = JSON.parse(previousRaw).version || null;
+          } catch {
+            previousVersion = null;
+          }
+
+          const version = current.version;
+          const fullTitle = current.fullTitle || `doX LMU Overlays Collection v${version}`;
+          const updateTitle = current.updateTitle || "New update";
+          const url = current.overtakeUrl || current.overtakeUpdatesUrl;
+
+          if (!version) {
+            throw new Error("Missing version in JSON.");
+          }
+
+          if (!url) {
+            throw new Error("Missing overtakeUrl/overtakeUpdatesUrl in JSON.");
+          }
+
+          if (previousVersion === version) {
+            console.log(`Version did not change: ${version}. Skipping Discord post.`);
+            process.exit(0);
+          }
+
+          const payload = {
+            username: "doX Updates",
+            allowed_mentions: {
+              parse: []
+            },
+            embeds: [
+              {
+                title: fullTitle,
+                url: url,
+                description: "A new version of doX LMU Overlays Collection is available.",
+                fields: [
+                  {
+                    name: "Version",
+                    value: version,
+                    inline: true
+                  },
+                  {
+                    name: "Update title",
+                    value: updateTitle,
+                    inline: false
+                  }
+                ],
+                footer: {
+                  text: "doX LMU Overlays Collection"
+                }
+              }
+            ]
+          };
+
+          const response = await fetch(webhookUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+            const body = await response.text();
+            throw new Error(`Discord webhook failed: ${response.status} ${body}`);
+          }
+
+          console.log(`Posted Discord update for version ${version}.`);
+          NODE
