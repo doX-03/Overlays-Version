@@ -1,0 +1,191 @@
+name: Sync OverTake update and post to Discord
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_post:
+        description: "Post to Discord even if the JSON did not change"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: write
+
+jobs:
+  update-and-post:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read OverTake, update JSON and post Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_UPDATES_WEBHOOK }}
+          FORCE_POST: ${{ inputs.force_post }}
+        run: |
+          node <<'NODE'
+          const fs = require("fs");
+          const { execSync } = require("child_process");
+
+          const updatePageUrl = "https://www.overtake.gg/downloads/dox-lmu-overlays-collection.79667/updates";
+          const jsonFile = "doX-LMU-Overlays-setup.json";
+          const webhookUrl = process.env.DISCORD_WEBHOOK_URL || "";
+          const forcePost = process.env.FORCE_POST === "true";
+
+          if (!webhookUrl) {
+            throw new Error("Missing DISCORD_UPDATES_WEBHOOK secret.");
+          }
+
+          function decodeHtml(text) {
+            return String(text || "")
+              .replace(/&amp;/g, "&")
+              .replace(/&#039;/g, "'")
+              .replace(/&#x27;/g, "'")
+              .replace(/&quot;/g, '"')
+              .replace(/&lt;/g, "<")
+              .replace(/&gt;/g, ">")
+              .replace(/\s+/g, " ")
+              .trim();
+          }
+
+          function normalizeUrl(url) {
+            url = decodeHtml(url || "");
+            if (!url) return updatePageUrl;
+            if (url.startsWith("http")) return url;
+            return "https://www.overtake.gg" + url;
+          }
+
+          const oldJson = fs.existsSync(jsonFile)
+            ? JSON.parse(fs.readFileSync(jsonFile, "utf8"))
+            : {};
+
+          const response = await fetch(updatePageUrl, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 doX-LMU-Update-Sync"
+            }
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to fetch OverTake page: ${response.status}`);
+          }
+
+          const html = await response.text();
+
+          const updateRegex = /<h2[^>]*>\s*<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>\s*<\/h2>/i;
+          const match = html.match(updateRegex);
+
+          if (!match) {
+            throw new Error("Could not find the latest OverTake update title.");
+          }
+
+          const latestUpdateUrl = normalizeUrl(match[1]);
+          const fullTitle = decodeHtml(match[2].replace(/<[^>]*>/g, ""));
+
+          const versionMatch = fullTitle.match(/v?(\d+(?:\.\d+){1,3})/i);
+
+          if (!versionMatch) {
+            throw new Error(`Could not extract version from title: ${fullTitle}`);
+          }
+
+          const version = versionMatch[1];
+
+          let updateTitle = fullTitle
+            .replace(/^v?\d+(?:\.\d+){1,3}\s*[-–—:]?\s*/i, "")
+            .trim();
+
+          if (!updateTitle) {
+            updateTitle = "Update";
+          }
+
+          const newJson = {
+            ...oldJson,
+            version,
+            updateTitle,
+            fullTitle,
+            overtakeUrl: latestUpdateUrl,
+            overtakeUpdatesUrl: updatePageUrl,
+            publishDiscord: oldJson.publishDiscord ?? true
+          };
+
+          const oldVersion = oldJson.version || "";
+          const oldFullTitle = oldJson.fullTitle || "";
+          const changed = oldVersion !== version || oldFullTitle !== fullTitle;
+
+          fs.writeFileSync(jsonFile, JSON.stringify(newJson, null, 2) + "\n");
+
+          console.log(`Latest OverTake update: ${fullTitle}`);
+          console.log(`Version: ${version}`);
+          console.log(`Update title: ${updateTitle}`);
+          console.log(`URL: ${latestUpdateUrl}`);
+          console.log(`Changed: ${changed}`);
+          console.log(`Force post: ${forcePost}`);
+
+          if (changed) {
+            execSync('git config user.name "doX Update Bot"');
+            execSync('git config user.email "actions@github.com"');
+            execSync(`git add ${jsonFile}`);
+            execSync(`git commit -m "Update OverTake version data"`);
+            execSync("git push");
+          } else {
+            console.log("JSON already up to date. No commit needed.");
+          }
+
+          if (newJson.publishDiscord === false) {
+            console.log("publishDiscord is false. Skipping Discord post.");
+            process.exit(0);
+          }
+
+          if (!changed && !forcePost) {
+            console.log("No new version and force_post is false. Skipping Discord post.");
+            process.exit(0);
+          }
+
+          const discordPayload = {
+            username: "doX Updates",
+            allowed_mentions: {
+              parse: []
+            },
+            embeds: [
+              {
+                title: fullTitle,
+                url: latestUpdateUrl,
+                description: "A new version of doX LMU Overlays Collection is available.",
+                fields: [
+                  {
+                    name: "Version",
+                    value: version,
+                    inline: true
+                  },
+                  {
+                    name: "Update title",
+                    value: updateTitle,
+                    inline: false
+                  }
+                ],
+                footer: {
+                  text: "doX LMU Overlays Collection"
+                }
+              }
+            ]
+          };
+
+          const discordResponse = await fetch(webhookUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(discordPayload)
+          });
+
+          if (!discordResponse.ok) {
+            const body = await discordResponse.text();
+            throw new Error(`Discord webhook failed: ${discordResponse.status} ${body}`);
+          }
+
+          console.log(`Discord post sent for version ${version}.`);
+          NODE
