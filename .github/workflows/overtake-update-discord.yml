@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       force_post:
-        description: "Post to Discord even if the JSON did not change"
+        description: "Post to Discord even if version did not change"
         required: false
         default: "false"
         type: choice
@@ -102,9 +102,13 @@ jobs:
             updateTitle = "Update";
           }
 
+          const oldVersion = oldJson.version || "";
+          const versionChanged = oldVersion !== version;
+
           const newJson = {
             ...oldJson,
             version,
+            downloadUrl: oldJson.downloadUrl || updatePageUrl,
             updateTitle,
             fullTitle,
             overtakeUrl: latestUpdateUrl,
@@ -112,20 +116,20 @@ jobs:
             publishDiscord: oldJson.publishDiscord ?? true
           };
 
-          const oldVersion = oldJson.version || "";
-          const oldFullTitle = oldJson.fullTitle || "";
-          const changed = oldVersion !== version || oldFullTitle !== fullTitle;
+          const oldSerialized = JSON.stringify(oldJson, null, 2) + "\n";
+          const newSerialized = JSON.stringify(newJson, null, 2) + "\n";
+          const jsonChanged = oldSerialized !== newSerialized;
 
-          fs.writeFileSync(jsonFile, JSON.stringify(newJson, null, 2) + "\n");
+          fs.writeFileSync(jsonFile, newSerialized);
 
-          console.log(`Latest OverTake update: ${fullTitle}`);
-          console.log(`Version: ${version}`);
-          console.log(`Update title: ${updateTitle}`);
-          console.log(`URL: ${latestUpdateUrl}`);
-          console.log(`Changed: ${changed}`);
+          console.log(`Old version: ${oldVersion}`);
+          console.log(`Latest OverTake version: ${version}`);
+          console.log(`Latest OverTake title: ${fullTitle}`);
+          console.log(`Version changed: ${versionChanged}`);
+          console.log(`JSON changed: ${jsonChanged}`);
           console.log(`Force post: ${forcePost}`);
 
-          if (changed) {
+          if (jsonChanged) {
             execSync('git config user.name "doX Update Bot"');
             execSync('git config user.email "actions@github.com"');
             execSync(`git add ${jsonFile}`);
@@ -140,8 +144,8 @@ jobs:
             process.exit(0);
           }
 
-          if (!changed && !forcePost) {
-            console.log("No new version and force_post is false. Skipping Discord post.");
+          if (!versionChanged && !forcePost) {
+            console.log("Version did not change and force_post is false. Skipping Discord post.");
             process.exit(0);
           }
 
