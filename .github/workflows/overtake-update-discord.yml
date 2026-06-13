@@ -38,6 +38,10 @@ jobs:
             const webhookUrl = process.env.DISCORD_WEBHOOK_URL || "";
             const forcePost = process.env.FORCE_POST === "true";
 
+            // Discord role ID for @Lapped car.
+            // Replace this with the real role ID copied from Discord.
+            const lappedCarRoleId = "COLE_AQUI_O_ID_DO_CARGO_LAPPED_CAR";
+
             function decodeHtml(text) {
               return String(text || "")
                 .replace(/&amp;/g, "&")
@@ -151,10 +155,60 @@ jobs:
               return;
             }
 
+            if (!lappedCarRoleId || lappedCarRoleId === "COLE_AQUI_O_ID_DO_CARGO_LAPPED_CAR") {
+              console.log("Lapped car role ID is not configured. Discord post will be sent without role mention.");
+
+              const discordPayloadWithoutMention = {
+                username: "doX Updates",
+                allowed_mentions: {
+                  parse: []
+                },
+                embeds: [
+                  {
+                    title: fullTitle,
+                    url: latestUpdateUrl,
+                    description: "A new version of doX LMU Overlays Collection is available.",
+                    fields: [
+                      {
+                        name: "Version",
+                        value: version,
+                        inline: true
+                      },
+                      {
+                        name: "Update title",
+                        value: updateTitle,
+                        inline: false
+                      }
+                    ],
+                    footer: {
+                      text: "doX LMU Overlays Collection"
+                    }
+                  }
+                ]
+              };
+
+              const discordResponse = await fetch(webhookUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify(discordPayloadWithoutMention)
+              });
+
+              if (!discordResponse.ok) {
+                const body = await discordResponse.text();
+                throw new Error(`Discord webhook failed: ${discordResponse.status} ${body}`);
+              }
+
+              console.log(`Discord post sent without role mention for version ${version}.`);
+              return;
+            }
+
             const discordPayload = {
               username: "doX Updates",
+              content: `<@&${lappedCarRoleId}>`,
               allowed_mentions: {
-                parse: []
+                roles: [lappedCarRoleId]
               },
               embeds: [
                 {
