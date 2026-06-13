@@ -40,7 +40,7 @@ jobs:
 
             // Discord role ID for @Lapped car.
             // Replace this with the real role ID copied from Discord.
-            const lappedCarRoleId = "COLE_AQUI_O_ID_DO_CARGO_LAPPED_CAR";
+            const lappedCarRoleId = "1514766461468414122";
 
             function decodeHtml(text) {
               return String(text || "")
