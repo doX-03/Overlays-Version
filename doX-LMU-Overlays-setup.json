@@ -1,9 +1,9 @@
 {
-  "version": "4.2.0.1",
+  "version": "4.2.0.2",
   "downloadUrl": "https://www.overtake.gg/downloads/dox-lmu-overlays-collection.79667/updates",
-  "updateTitle": "Fixed wrong file",
-  "fullTitle": "4.2.0.1 - Fixed wrong file",
-  "overtakeUrl": "https://www.overtake.gg/downloads/dox-lmu-overlays-collection.79667/update/152311/",
+  "updateTitle": "Quick Fix - Relative",
+  "fullTitle": "4.2.0.2 - Quick Fix - Relative",
+  "overtakeUrl": "https://www.overtake.gg/downloads/dox-lmu-overlays-collection.79667/update/152334/",
   "overtakeUpdatesUrl": "https://www.overtake.gg/downloads/dox-lmu-overlays-collection.79667/updates",
   "publishDiscord": true
 }
