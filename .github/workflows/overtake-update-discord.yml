@@ -17,7 +17,10 @@ permissions:
 
 jobs:
   update-and-post:
-    runs-on: ubuntu-latest
+    # IMPORTANTE:
+    # Use self-hosted para evitar o bloqueio Cloudflare contra GitHub-hosted runners.
+    # Se trocar para ubuntu-latest, o erro 403 provavelmente volta.
+    runs-on: self-hosted
 
     steps:
       - name: Checkout repository
@@ -36,6 +39,7 @@ jobs:
             const updatePageUrl = "https://www.overtake.gg/downloads/dox-lmu-overlays-collection.79667/updates";
             const resourcePathNeedle = "/downloads/dox-lmu-overlays-collection.79667/";
             const jsonFile = "doX-LMU-Overlays-setup.json";
+
             const webhookUrl = process.env.DISCORD_WEBHOOK_URL || "";
             const forcePost = process.env.FORCE_POST === "true";
 
@@ -73,40 +77,58 @@ jobs:
 
             function normalizeUrl(url) {
               url = decodeHtml(url || "");
-              if (!url) return updatePageUrl;
-              if (url.startsWith("http://") || url.startsWith("https://")) return url;
-              if (url.startsWith("//")) return "https:" + url;
-              if (url.startsWith("/")) return "https://www.overtake.gg" + url;
+
+              if (!url) {
+                return updatePageUrl;
+              }
+
+              if (url.startsWith("http://") || url.startsWith("https://")) {
+                return url;
+              }
+
+              if (url.startsWith("//")) {
+                return "https:" + url;
+              }
+
+              if (url.startsWith("/")) {
+                return "https://www.overtake.gg" + url;
+              }
+
               return "https://www.overtake.gg/" + url;
             }
 
             async function fetchOvertakeHtml(url) {
-              const headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7",
-                "Cache-Control": "no-cache",
-                "Pragma": "no-cache",
-                "Referer": "https://www.overtake.gg/",
-                "Upgrade-Insecure-Requests": "1",
-                "DNT": "1"
-              };
-
               const response = await fetch(url, {
                 method: "GET",
-                headers,
-                redirect: "follow"
+                redirect: "follow",
+                headers: {
+                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+                  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                  "Accept-Language": "en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7",
+                  "Cache-Control": "no-cache",
+                  "Pragma": "no-cache",
+                  "Referer": "https://www.overtake.gg/",
+                  "Upgrade-Insecure-Requests": "1",
+                  "DNT": "1"
+                }
               });
 
               const body = await response.text();
 
-              if (!response.ok) {
-                const preview = body
-                  .replace(/\s+/g, " ")
-                  .slice(0, 800);
+              const isCloudflareChallenge =
+                body.includes("challenges.cloudflare.com") ||
+                body.includes("<title>Just a moment...</title>") ||
+                body.includes("cf-browser-verification") ||
+                body.includes("__cf_chl");
+
+              if (!response.ok || isCloudflareChallenge) {
+                const preview = body.replace(/\s+/g, " ").slice(0, 1000);
 
                 throw new Error(
-                  `Failed to fetch OverTake page: ${response.status}. Response preview: ${preview}`
+                  "Failed to fetch OverTake page. " +
+                  `Status: ${response.status}. ` +
+                  `Cloudflare challenge: ${isCloudflareChallenge}. ` +
+                  `Response preview: ${preview}`
                 );
               }
 
@@ -140,7 +162,6 @@ jobs:
                 return candidates[0];
               }
 
-              // Fallback: old layout, h2 > a.
               const h2Regex = /<h2[^>]*>\s*<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>\s*<\/h2>/gi;
 
               for (const match of html.matchAll(h2Regex)) {
