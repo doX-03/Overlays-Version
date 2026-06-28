@@ -23,12 +23,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Read OverTake, update JSON and post Discord
+        shell: pwsh
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_UPDATES_WEBHOOK }}
           FORCE_POST: ${{ inputs.force_post }}
         run: |
-          node <<'NODE'
+          @'
           (async () => {
             const fs = require("fs");
             const { execSync } = require("child_process");
@@ -40,7 +46,6 @@ jobs:
             const webhookUrl = process.env.DISCORD_WEBHOOK_URL || "";
             const forcePost = process.env.FORCE_POST === "true";
 
-            // Discord role ID for @Lapped car.
             const lappedCarRoleId = "1514766461468414122";
 
             function decodeHtml(text) {
@@ -109,46 +114,28 @@ jobs:
             }
 
             function extractLatestUpdateFromHtml(html) {
-              // Prefer update headings. This avoids picking the main resource title.
               const headingRegex = /<h[1-4][^>]*>\s*<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>\s*<\/h[1-4]>/gi;
 
               for (const match of html.matchAll(headingRegex)) {
                 const href = normalizeUrl(match[1]);
                 const title = stripTags(match[2]);
 
-                if (!href.includes(resourcePathNeedle)) {
-                  continue;
-                }
+                if (!href.includes(resourcePathNeedle)) continue;
+                if (!title.match(/^v?\d+(?:\.\d+){1,3}\b/i)) continue;
 
-                if (!title.match(/^v?\d+(?:\.\d+){1,3}\b/i)) {
-                  continue;
-                }
-
-                return {
-                  url: href,
-                  title
-                };
+                return { url: href, title };
               }
 
-              // Fallback for layout changes.
               const anchorRegex = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
 
               for (const match of html.matchAll(anchorRegex)) {
                 const href = normalizeUrl(match[1]);
                 const title = stripTags(match[2]);
 
-                if (!href.includes(resourcePathNeedle)) {
-                  continue;
-                }
+                if (!href.includes(resourcePathNeedle)) continue;
+                if (!title.match(/^v?\d+(?:\.\d+){1,3}\b/i)) continue;
 
-                if (!title.match(/^v?\d+(?:\.\d+){1,3}\b/i)) {
-                  continue;
-                }
-
-                return {
-                  url: href,
-                  title
-                };
+                return { url: href, title };
               }
 
               throw new Error("Could not find the latest OverTake update title/link.");
@@ -241,12 +228,8 @@ jobs:
               username: "doX Updates",
               content: hasRoleMention ? `<@&${lappedCarRoleId}>` : "",
               allowed_mentions: hasRoleMention
-                ? {
-                    roles: [lappedCarRoleId]
-                  }
-                : {
-                    parse: []
-                  },
+                ? { roles: [lappedCarRoleId] }
+                : { parse: [] },
               embeds: [
                 {
                   title: fullTitle,
@@ -298,4 +281,6 @@ jobs:
             console.error(error);
             process.exit(1);
           });
-          NODE
+          '@ | Set-Content -Path sync-overtake-discord.js -Encoding UTF8
+
+          node sync-overtake-discord.js
