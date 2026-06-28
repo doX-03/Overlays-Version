@@ -34,12 +34,12 @@ jobs:
             const { execSync } = require("child_process");
 
             const updatePageUrl = "https://www.overtake.gg/downloads/dox-lmu-overlays-collection.79667/updates";
+            const resourcePathNeedle = "/downloads/dox-lmu-overlays-collection.79667/";
             const jsonFile = "doX-LMU-Overlays-setup.json";
             const webhookUrl = process.env.DISCORD_WEBHOOK_URL || "";
             const forcePost = process.env.FORCE_POST === "true";
 
             // Discord role ID for @Lapped car.
-            // Replace this with the real role ID copied from Discord.
             const lappedCarRoleId = "1514766461468414122";
 
             function decodeHtml(text) {
@@ -50,42 +50,129 @@ jobs:
                 .replace(/&quot;/g, '"')
                 .replace(/&lt;/g, "<")
                 .replace(/&gt;/g, ">")
+                .replace(/&#(\d+);/g, (_, code) => {
+                  const n = Number(code);
+                  return Number.isFinite(n) ? String.fromCharCode(n) : "";
+                })
+                .replace(/&#x([0-9a-f]+);/gi, (_, code) => {
+                  const n = parseInt(code, 16);
+                  return Number.isFinite(n) ? String.fromCharCode(n) : "";
+                })
                 .replace(/\s+/g, " ")
                 .trim();
+            }
+
+            function stripTags(html) {
+              return decodeHtml(
+                String(html || "")
+                  .replace(/<script[\s\S]*?<\/script>/gi, " ")
+                  .replace(/<style[\s\S]*?<\/style>/gi, " ")
+                  .replace(/<[^>]*>/g, " ")
+              );
             }
 
             function normalizeUrl(url) {
               url = decodeHtml(url || "");
               if (!url) return updatePageUrl;
-              if (url.startsWith("http")) return url;
-              return "https://www.overtake.gg" + url;
+              if (url.startsWith("http://") || url.startsWith("https://")) return url;
+              if (url.startsWith("//")) return "https:" + url;
+              if (url.startsWith("/")) return "https://www.overtake.gg" + url;
+              return "https://www.overtake.gg/" + url;
+            }
+
+            async function fetchOvertakeHtml(url) {
+              const headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7",
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache",
+                "Referer": "https://www.overtake.gg/",
+                "Upgrade-Insecure-Requests": "1",
+                "DNT": "1"
+              };
+
+              const response = await fetch(url, {
+                method: "GET",
+                headers,
+                redirect: "follow"
+              });
+
+              const body = await response.text();
+
+              if (!response.ok) {
+                const preview = body
+                  .replace(/\s+/g, " ")
+                  .slice(0, 800);
+
+                throw new Error(
+                  `Failed to fetch OverTake page: ${response.status}. Response preview: ${preview}`
+                );
+              }
+
+              return body;
+            }
+
+            function extractLatestUpdateFromHtml(html) {
+              const candidates = [];
+
+              const anchorRegex = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+
+              for (const match of html.matchAll(anchorRegex)) {
+                const href = normalizeUrl(match[1]);
+                const title = stripTags(match[2]);
+
+                if (!href.includes(resourcePathNeedle)) {
+                  continue;
+                }
+
+                if (!title.match(/v?\d+(?:\.\d+){1,3}/i)) {
+                  continue;
+                }
+
+                candidates.push({
+                  url: href,
+                  title
+                });
+              }
+
+              if (candidates.length > 0) {
+                return candidates[0];
+              }
+
+              // Fallback: old layout, h2 > a.
+              const h2Regex = /<h2[^>]*>\s*<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>\s*<\/h2>/gi;
+
+              for (const match of html.matchAll(h2Regex)) {
+                const href = normalizeUrl(match[1]);
+                const title = stripTags(match[2]);
+
+                if (!href.includes(resourcePathNeedle)) {
+                  continue;
+                }
+
+                if (!title.match(/v?\d+(?:\.\d+){1,3}/i)) {
+                  continue;
+                }
+
+                return {
+                  url: href,
+                  title
+                };
+              }
+
+              throw new Error("Could not find the latest OverTake update title/link.");
             }
 
             const oldJson = fs.existsSync(jsonFile)
               ? JSON.parse(fs.readFileSync(jsonFile, "utf8"))
               : {};
 
-            const response = await fetch(updatePageUrl, {
-              headers: {
-                "User-Agent": "Mozilla/5.0 doX-LMU-Update-Sync"
-              }
-            });
+            const html = await fetchOvertakeHtml(updatePageUrl);
+            const latestUpdate = extractLatestUpdateFromHtml(html);
 
-            if (!response.ok) {
-              throw new Error(`Failed to fetch OverTake page: ${response.status}`);
-            }
-
-            const html = await response.text();
-
-            const updateRegex = /<h2[^>]*>\s*<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>\s*<\/h2>/i;
-            const match = html.match(updateRegex);
-
-            if (!match) {
-              throw new Error("Could not find the latest OverTake update title.");
-            }
-
-            const latestUpdateUrl = normalizeUrl(match[1]);
-            const fullTitle = decodeHtml(match[2].replace(/<[^>]*>/g, ""));
+            const latestUpdateUrl = latestUpdate.url;
+            const fullTitle = latestUpdate.title;
 
             const versionMatch = fullTitle.match(/v?(\d+(?:\.\d+){1,3})/i);
 
@@ -97,6 +184,7 @@ jobs:
 
             let updateTitle = fullTitle
               .replace(/^v?\d+(?:\.\d+){1,3}\s*[-–—:]?\s*/i, "")
+              .replace(/^doX\s+LMU\s+Overlays\s+Collection\s*v?\d+(?:\.\d+){1,3}\s*[-–—:]?\s*/i, "")
               .trim();
 
             if (!updateTitle) {
@@ -123,9 +211,10 @@ jobs:
 
             fs.writeFileSync(jsonFile, newSerialized);
 
-            console.log(`Old version: ${oldVersion}`);
+            console.log(`Old version: ${oldVersion || "(none)"}`);
             console.log(`Latest OverTake version: ${version}`);
             console.log(`Latest OverTake title: ${fullTitle}`);
+            console.log(`Latest OverTake URL: ${latestUpdateUrl}`);
             console.log(`Version changed: ${versionChanged}`);
             console.log(`JSON changed: ${jsonChanged}`);
             console.log(`Force post: ${forcePost}`);
@@ -155,61 +244,20 @@ jobs:
               return;
             }
 
-            if (!lappedCarRoleId || lappedCarRoleId === "COLE_AQUI_O_ID_DO_CARGO_LAPPED_CAR") {
-              console.log("Lapped car role ID is not configured. Discord post will be sent without role mention.");
-
-              const discordPayloadWithoutMention = {
-                username: "doX Updates",
-                allowed_mentions: {
-                  parse: []
-                },
-                embeds: [
-                  {
-                    title: fullTitle,
-                    url: latestUpdateUrl,
-                    description: "A new version of doX LMU Overlays Collection is available.",
-                    fields: [
-                      {
-                        name: "Version",
-                        value: version,
-                        inline: true
-                      },
-                      {
-                        name: "Update title",
-                        value: updateTitle,
-                        inline: false
-                      }
-                    ],
-                    footer: {
-                      text: "doX LMU Overlays Collection"
-                    }
-                  }
-                ]
-              };
-
-              const discordResponse = await fetch(webhookUrl, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json"
-                },
-                body: JSON.stringify(discordPayloadWithoutMention)
-              });
-
-              if (!discordResponse.ok) {
-                const body = await discordResponse.text();
-                throw new Error(`Discord webhook failed: ${discordResponse.status} ${body}`);
-              }
-
-              console.log(`Discord post sent without role mention for version ${version}.`);
-              return;
-            }
+            const hasRoleMention =
+              lappedCarRoleId &&
+              lappedCarRoleId !== "COLE_AQUI_O_ID_DO_CARGO_LAPPED_CAR";
 
             const discordPayload = {
               username: "doX Updates",
-              content: `<@&${lappedCarRoleId}>`,
-              allowed_mentions: {
-                roles: [lappedCarRoleId]
-              },
+              content: hasRoleMention ? `<@&${lappedCarRoleId}>` : "",
+              allowed_mentions: hasRoleMention
+                ? {
+                    roles: [lappedCarRoleId]
+                  }
+                : {
+                    parse: []
+                  },
               embeds: [
                 {
                   title: fullTitle,
@@ -224,6 +272,11 @@ jobs:
                     {
                       name: "Update title",
                       value: updateTitle,
+                      inline: false
+                    },
+                    {
+                      name: "Download",
+                      value: updatePageUrl,
                       inline: false
                     }
                   ],
@@ -247,7 +300,11 @@ jobs:
               throw new Error(`Discord webhook failed: ${discordResponse.status} ${body}`);
             }
 
-            console.log(`Discord post sent for version ${version}.`);
+            console.log(
+              hasRoleMention
+                ? `Discord post sent with role mention for version ${version}.`
+                : `Discord post sent without role mention for version ${version}.`
+            );
           })().catch(error => {
             console.error(error);
             process.exit(1);
