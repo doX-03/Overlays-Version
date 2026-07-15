@@ -1,9 +1,9 @@
 {
-  "version": "4.6.1",
+  "version": "4.6.2",
   "downloadUrl": "https://www.overtake.gg/downloads/dox-lmu-overlays-collection.79667/updates",
-  "updateTitle": "Overlay Fixes",
-  "fullTitle": "4.6.1 - Overlay Fixes",
-  "overtakeUrl": "https://www.overtake.gg/downloads/dox-lmu-overlays-collection.79667/updates#resource-update-153259",
+  "updateTitle": "Critical Timing Hotfix",
+  "fullTitle": "4.6.2 - Critical Timing Hotfix",
+  "overtakeUrl": "https://www.overtake.gg/downloads/dox-lmu-overlays-collection.79667/updates#resource-update-153269",
   "overtakeUpdatesUrl": "https://www.overtake.gg/downloads/dox-lmu-overlays-collection.79667/updates",
   "publishDiscord": true
 }
