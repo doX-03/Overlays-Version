@@ -14,12 +14,12 @@
     "rivals": "1.5.2",
     "sessionInfos": "1.5.3",
     "setupCover": "1.0.0",
-    "standings": "2.6.1",
+    "standings": "2.6.2",
     "stintHistory": "1.0.4",
     "stintTarget": "1.0.1",
-    "timingAndSectors": "2.11.1",
-    "trackMap": "1.5.0",
+    "timingAndSectors": "2.11.2",
+    "trackMap": "1.5.2",
     "tyreInnerLayer": "1.0.1",
-    "weatherForecast": "1.1.1",
+    "weatherForecast": "1.1.2",
     "wind": "1.0"
   }
